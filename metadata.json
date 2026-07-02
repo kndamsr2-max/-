@@ -1,0 +1,6 @@
+{
+  "name": "Al-Meezan .Net ERP",
+  "description": "برنامج الميزان دوت نت للمحاسبة والمستودعات - نظام مالي متكامل لإدارة الحسابات، المستودعات، المبيعات والموارد البشرية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
