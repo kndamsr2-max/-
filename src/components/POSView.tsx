@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { mockDatabase } from '../data/mockDatabase';
 import { Product } from '../types';
+import ProductModal from './ProductModal';
 
 interface POSViewProps {
   lang: 'ar' | 'en';
@@ -17,6 +18,7 @@ export default function POSView({ lang, currentUser, onClose }: POSViewProps) {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   
   // Cart state
   const [cart, setCart] = useState<Array<{ product: Product; qty: number }>>([]);
@@ -257,6 +259,14 @@ export default function POSView({ lang, currentUser, onClose }: POSViewProps) {
               <option value="giza">{lang === 'ar' ? 'فرع الجيزة الجديد' : 'Giza Branch'}</option>
             </select>
           </div>
+
+          <button
+            onClick={() => setIsProductModalOpen(true)}
+            className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-amber-950/40 px-3 py-1.5 rounded text-amber-600 dark:text-amber-400 text-xs font-bold border border-amber-200 dark:border-slate-700 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{lang === 'ar' ? 'إضافة كارت صنف (+)' : 'Add Item Card (+)'}</span>
+          </button>
 
           <button
             onClick={onClose}
@@ -738,6 +748,16 @@ export default function POSView({ lang, currentUser, onClose }: POSViewProps) {
           </div>
         </div>
       )}
+
+      <ProductModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onSave={(newProduct) => {
+          setProducts(mockDatabase.getProducts());
+        }}
+        lang={lang}
+        currentUser={currentUser}
+      />
 
     </div>
   );

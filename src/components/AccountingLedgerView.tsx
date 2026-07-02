@@ -16,39 +16,51 @@ export default function AccountingLedgerView({ lang, currentUser, onClose }: Acc
   const [activeSubTab, setActiveSubTab] = useState<'accounts' | 'expenses' | 'cost_centers' | 'assets' | 'cheques' | 'trial_balance'>('accounts');
 
   // Chart of accounts state
-  const [accounts, setAccounts] = useState([
-    { code: '1000', name: 'الأصول الثابتة', nameEn: 'Fixed Assets', type: 'asset', balance: 450000 },
-    { code: '1101', name: 'الخزينة الرئيسية - صندوق القاهرة', nameEn: 'Main Safe Box - Cairo', type: 'asset', balance: 215000 },
-    { code: '1102', name: 'البنك التجاري الدولي CIB', nameEn: 'CIB Bank Account', type: 'asset', balance: 1450000 },
-    { code: '1201', name: 'مخزون المنتجات التامة', nameEn: 'Finished Goods Inventory', type: 'asset', balance: 350000 },
-    { code: '2101', name: 'الموردون والدائنون المعتمدون', nameEn: 'Accounts Payable', type: 'liability', balance: 185000 },
-    { code: '2201', name: 'مخصص إهلاك الأصول المتراكم', nameEn: 'Accumulated Depreciation', type: 'liability', balance: 45000 },
-    { code: '3000', name: 'رأس مال شركة سامي سيستم', nameEn: 'Owner Equity Capital', type: 'equity', balance: 2000000 },
-    { code: '3101', name: 'الأرباح المحتجزة / أرصدة افتتاحية', nameEn: 'Retained Earnings / Opening Balances', type: 'equity', balance: 150000 },
-    { code: '4101', name: 'إيرادات مبيعات الأجهزة الفورية', nameEn: 'Sales Revenues', type: 'revenue', balance: 530000 },
-    { code: '5101', name: 'مصروفات الإيجار السنوي', nameEn: 'Rent Expenses', type: 'expense', balance: 120000 },
-    { code: '5102', name: 'مصروفات المرتبات والأجور الكلية', nameEn: 'Salaries Expenses', type: 'expense', balance: 280000 },
-    { code: '5103', name: 'مصروفات عمومية وإدارية', nameEn: 'General & Admin Expenses', type: 'expense', balance: 45000 },
-  ]);
-
+  const [accounts, setAccountsState] = useState<any[]>([]);
   // Balanced Journal entry creator state
-  const [journalEntries, setJournalEntries] = useState([
-    { id: 'JV-101', date: '2026-06-20', desc: 'إثبات سداد الإيجار السنوي للمقر الرئيسي', debitAcc: '5101', creditAcc: '1102', amount: 15000, status: 'approved' },
-    { id: 'JV-102', date: '2026-06-24', desc: 'شراء أجهزة مكتبية ومقاعد فرع الجيزة', debitAcc: '1000', creditAcc: '1101', amount: 45000, status: 'approved' },
-    { id: 'JV-103', date: '2026-06-28', desc: 'تحصيل دفعة بشيك من شركة النور', debitAcc: '1102', creditAcc: '2101', amount: 80000, status: 'approved' }
-  ]);
+  const [journalEntries, setJournalEntriesState] = useState<any[]>([]);
+  // Expenses management state
+  const [expenses, setExpensesState] = useState<any[]>([]);
+  // Cheque Cycle tracking state
+  const [cheques, setChequesState] = useState<any[]>([]);
+
+  useEffect(() => {
+    mockDatabase.init();
+    setAccountsState(mockDatabase.getAccounts());
+    setJournalEntriesState(mockDatabase.getJournalEntries());
+    setExpensesState(mockDatabase.getExpenses());
+    setChequesState(mockDatabase.getCheques());
+  }, []);
+
+  const setAccounts = (val: any) => {
+    const next = typeof val === 'function' ? val(accounts) : val;
+    mockDatabase.saveAccounts(next);
+    setAccountsState(next);
+  };
+
+  const setJournalEntries = (val: any) => {
+    const next = typeof val === 'function' ? val(journalEntries) : val;
+    mockDatabase.saveJournalEntries(next);
+    setJournalEntriesState(next);
+  };
+
+  const setExpenses = (val: any) => {
+    const next = typeof val === 'function' ? val(expenses) : val;
+    mockDatabase.saveExpenses(next);
+    setExpensesState(next);
+  };
+
+  const setCheques = (val: any) => {
+    const next = typeof val === 'function' ? val(cheques) : val;
+    mockDatabase.saveCheques(next);
+    setChequesState(next);
+  };
 
   const [newJvDesc, setNewJvDesc] = useState('');
   const [newJvDebit, setNewJvDebit] = useState('5103');
   const [newJvCredit, setNewJvCredit] = useState('1101');
   const [newJvAmount, setNewJvAmount] = useState<number>(0);
 
-  // Expenses management state
-  const [expenses, setExpenses] = useState([
-    { id: 1, date: '2026-06-15', category: 'كهرباء ومياه', accountCode: '5103', amount: 4500, paidVia: 'cash', notes: 'سداد فاتورة كهرباء مخزن بولارس' },
-    { id: 2, date: '2026-06-18', category: 'صيانة وشحن المبيعات', accountCode: '5103', amount: 2800, paidVia: 'cib', notes: 'صيانة مكيفات صالة المبيعات الرئيسية' },
-    { id: 3, date: '2026-06-25', category: 'مرتبات مستشارين فنيين', accountCode: '5102', amount: 35000, paidVia: 'cib', notes: 'سداد تعاقد الاستشارات التقنية' }
-  ]);
   const [expenseCat, setExpenseCat] = useState('كهرباء ومياه');
   const [expenseAmount, setExpenseAmount] = useState<number>(0);
   const [expenseVia, setExpenseVia] = useState('cash');
@@ -67,14 +79,6 @@ export default function AccountingLedgerView({ lang, currentUser, onClose }: Acc
     { id: 'AST-01', name: 'خوادم الشبكة السحابية الرئيسية IBM', purchaseDate: '2026-01-10', cost: 180000, depRate: 20, accDep: 18000, value: 162000 },
     { id: 'AST-02', name: 'سيارة جيب جراند شيروكي لنقل المبيعات', purchaseDate: '2026-02-15', cost: 240000, depRate: 15, accDep: 12000, value: 228000 },
     { id: 'AST-03', name: 'مكيفات مركزية وأثاث الفرع الرئيسي', purchaseDate: '2026-03-01', cost: 30000, depRate: 10, accDep: 1000, value: 29000 }
-  ]);
-
-  // Cheque Cycle tracking state
-  const [cheques, setCheques] = useState([
-    { id: 'CHQ-9901', bank: 'البنك التجاري الدولي CIB', chqNo: 'CIB-001290', amount: 150000, type: 'incoming', drawer: 'شركة النor للمقاولات', dueDate: '2026-07-15', status: 'pending' },
-    { id: 'CHQ-9902', bank: 'بنك قطر الوطني QNB', chqNo: 'QNB-881200', amount: 45000, type: 'outgoing', drawer: 'شركة النصر للكرتون', dueDate: '2026-06-28', status: 'collected' },
-    { id: 'CHQ-9903', bank: 'بنك مصر - فرع البطل', chqNo: 'MISR-041922', amount: 95000, type: 'incoming', drawer: 'مؤسسة الرياض للأوراق', dueDate: '2026-07-20', status: 'pending' },
-    { id: 'CHQ-9904', bank: 'البنك الأهلي المصري', chqNo: 'NBE-331201', amount: 60000, type: 'outgoing', drawer: 'مورد الأخشاب المعتمد', dueDate: '2026-07-05', status: 'bounced' }
   ]);
 
   // Actions handlers

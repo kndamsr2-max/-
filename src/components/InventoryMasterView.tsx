@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { mockDatabase } from '../data/mockDatabase';
 import { Product } from '../types';
+import ProductModal from './ProductModal';
 
 interface InventoryMasterProps {
   lang: 'ar' | 'en';
@@ -15,6 +16,7 @@ interface InventoryMasterProps {
 export default function InventoryMasterView({ lang, currentUser, onClose }: InventoryMasterProps) {
   const [activeSubTab, setActiveSubTab] = useState<'vouchers' | 'jard' | 'promos'>('vouchers');
   const [products, setProducts] = useState<Product[]>([]);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
 
   // Stock Vouchers state
   const [vouchers, setVouchers] = useState([
@@ -317,7 +319,17 @@ export default function InventoryMasterView({ lang, currentUser, onClose }: Inve
                   </div>
 
                   <div>
-                    <label className="block text-[10px] text-slate-500 font-bold mb-1">{lang === 'ar' ? 'الصنف المستودعي:' : 'Select Product:'}</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[10px] text-slate-500 font-bold">{lang === 'ar' ? 'الصنف المستودعي:' : 'Select Product:'}</label>
+                      <button
+                        type="button"
+                        onClick={() => setIsProductModalOpen(true)}
+                        className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus className="w-2.5 h-2.5" />
+                        <span>{lang === 'ar' ? 'كارت صنف جديد (+)' : 'New Item Card (+)'}</span>
+                      </button>
+                    </div>
                     <select
                       value={vProdCode}
                       onChange={(e) => setVProdCode(e.target.value)}
@@ -596,6 +608,17 @@ export default function InventoryMasterView({ lang, currentUser, onClose }: Inve
         )}
 
       </div>
+
+      <ProductModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onSave={(newProduct) => {
+          loadProducts();
+          setVProdCode(newProduct.code); // select the newly created product
+        }}
+        lang={lang}
+        currentUser={currentUser}
+      />
 
     </div>
   );

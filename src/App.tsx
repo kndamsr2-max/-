@@ -4,7 +4,7 @@ import {
   ChevronDown, Sun, Moon, Sparkles, FolderKanban, HelpCircle, LayoutDashboard,
   ShoppingBag, ShoppingCart, Package, Users, Briefcase, Settings, Database, 
   Activity, ArrowLeftRight, CreditCard, ShieldCheck, FileSpreadsheet, X, Pin, PinOff, Scale,
-  Maximize2, Minimize2, Split
+  Maximize2, Minimize2, Split, Plus
 } from 'lucide-react';
 import { mockDatabase } from './data/mockDatabase';
 import { Tab, User, Product } from './types';
@@ -21,6 +21,7 @@ import AccountingLedgerView from './components/AccountingLedgerView';
 import InventoryMasterView from './components/InventoryMasterView';
 import HRAndCRMView from './components/HRAndCRMView';
 import EnterpriseExtraView from './components/EnterpriseExtraView';
+import ProductModal from './components/ProductModal';
 
 export const accentColors = {
   gold: {
@@ -95,6 +96,9 @@ export default function App() {
   const [themeAccent, setThemeAccent] = useState<'gold' | 'blue' | 'emerald' | 'violet' | 'rose'>(() => {
     return (localStorage.getItem('al_meezan_theme_accent') as any) || 'gold';
   });
+  const [isLargeBoldFont, setIsLargeBoldFont] = useState<boolean>(() => {
+    return localStorage.getItem('al_meezan_large_font') === 'true';
+  });
   
   // Real-time Header Clock
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -111,6 +115,15 @@ export default function App() {
   const [showMessages, setShowMessages] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [productRefreshKey, setProductRefreshKey] = useState(0);
+
+  // Database states
+  const [showDbMenu, setShowDbMenu] = useState(false);
+  const [databases, setDatabases] = useState<any[]>([]);
+  const [activeDbId, setActiveDbId] = useState<string>('default');
+  const [newDbName, setNewDbName] = useState('');
+  const [newDbNameEn, setNewDbNameEn] = useState('');
 
   // Notifications preloaded
   const [notifications, setNotifications] = useState([
@@ -128,6 +141,8 @@ export default function App() {
   useEffect(() => {
     // Initiate DB
     mockDatabase.init();
+    setDatabases(mockDatabase.getDatabases());
+    setActiveDbId(mockDatabase.getActiveDatabaseId());
     
     // Header clock update
     const interval = setInterval(() => {
@@ -158,6 +173,10 @@ export default function App() {
     root.style.setProperty('--light-bg', active.lightBg);
   }, [themeAccent]);
 
+  useEffect(() => {
+    localStorage.setItem('al_meezan_large_font', isLargeBoldFont.toString());
+  }, [isLargeBoldFont]);
+
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
     // Initialize default tabs once logged in
@@ -178,6 +197,113 @@ export default function App() {
     }
     setCurrentUser(null);
     setTabs([]);
+  };
+
+  const handleSwitchDb = (dbId: string) => {
+    mockDatabase.setActiveDatabaseId(dbId);
+    setActiveDbId(dbId);
+    setDatabases(mockDatabase.getDatabases());
+    
+    const users = mockDatabase.getUsers();
+    const match = users.find(u => u.username === currentUser?.username);
+    if (match) {
+      setCurrentUser(match);
+      mockDatabase.addAuditLog(
+        match.id,
+        match.username,
+        'تبديل قاعدة البيانات',
+        `تم الانتقال إلى قاعدة البيانات: ${mockDatabase.getDatabases().find(d => d.id === dbId)?.name || dbId}`
+      );
+    } else {
+      setCurrentUser(users[0] || null);
+    }
+
+    setTabs([
+      { id: 'dashboard', title: 'لوحة التحكم', titleEn: 'Dashboard', type: 'dashboard', isPinned: true }
+    ]);
+    setActiveTabId('dashboard');
+    setShowDbMenu(false);
+  };
+
+  const handleCreateDb = () => {
+    if (!newDbName.trim()) return;
+    const nameEn = newDbNameEn.trim() || newDbName.trim();
+    const newDb = mockDatabase.createDatabase(newDbName.trim(), nameEn);
+    
+    setActiveDbId(newDb.id);
+    setDatabases(mockDatabase.getDatabases());
+    setNewDbName('');
+    setNewDbNameEn('');
+    
+    const users = mockDatabase.getUsers();
+    setCurrentUser(users[0] || null);
+
+    setTabs([
+      { id: 'dashboard', title: 'لوحة التحكم', titleEn: 'Dashboard', type: 'dashboard', isPinned: true }
+    ]);
+    setActiveTabId('dashboard');
+    setShowDbMenu(false);
+
+    setNotifications(prev => [
+      {
+        id: Date.now(),
+        text: lang === 'ar' 
+          ? `تم إنشاء وتفعيل قاعدة البيانات "${newDb.name}" بنجاح!` 
+          : `Database "${newDb.nameEn}" was created and activated successfully!`,
+        time: 'الآن',
+        unread: true
+      },
+      ...prev
+    ]);
+  };
+
+  const exportProductsToCSV = () => {
+    const headers = lang === 'ar'
+      ? ['كود الصنف', 'اسم الصنف', 'الباركود الدولي', 'الوحدة', 'سعر البيع', 'التكلفة', 'الكمية الفورية', 'التاريخ والتشغيلة']
+      : ['Product Code', 'Product Name', 'Barcode', 'Unit', 'Price', 'Cost', 'Current Stock', 'Expiry/Batch'];
+    const rows = mockDatabase.getProducts().map(p => [
+      `"${p.code}"`,
+      `"${p.name.replace(/"/g, '""')}"`,
+      `"${p.barcode}"`,
+      `"${p.unit}"`,
+      p.price,
+      p.cost,
+      p.stock,
+      `"${p.expiryDate || 'مستمر'}"`
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `product_directory.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportPartnersToCSV = (type: 'clients' | 'vendors') => {
+    const partners = mockDatabase.getPartners().filter(p => p.type === (type === 'clients' ? 'client' : 'vendor'));
+    const headers = lang === 'ar'
+      ? ['كود الشريك', 'الاسم بالكامل', 'الهاتف والاتصال', 'البريد الإلكتروني', 'المقر الرئيسي', 'الرصيد الدفتري الحالي']
+      : ['Partner Code', 'Full Name', 'Phone', 'Email', 'Address', 'Balance'];
+    const rows = partners.map(p => [
+      `"${p.id}"`,
+      `"${p.name.replace(/"/g, '""')}"`,
+      `"${p.phone}"`,
+      `"${p.email}"`,
+      `"${p.address.replace(/"/g, '""')}"`,
+      p.balance
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${type}_directory.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Browser-style tab opening system
@@ -355,6 +481,20 @@ export default function App() {
           </div>
         );
 
+      case 'sales_return':
+        return (
+          <div className="w-full">
+            <InvoiceView
+              lang={lang}
+              invoiceId={tab.props?.invoiceId}
+              invoiceType="sale_return"
+              currentUser={currentUser}
+              onClose={() => handleCloseTab(tab.id)}
+              onRefreshDashboard={() => {}}
+            />
+          </div>
+        );
+
       case 'purchase_invoice':
         return (
           <div className="w-full">
@@ -369,13 +509,58 @@ export default function App() {
           </div>
         );
 
+      case 'purchase_return':
+        return (
+          <div className="w-full">
+            <InvoiceView
+              lang={lang}
+              invoiceId={tab.props?.invoiceId}
+              invoiceType="purchase_return"
+              currentUser={currentUser}
+              onClose={() => handleCloseTab(tab.id)}
+              onRefreshDashboard={() => {}}
+            />
+          </div>
+        );
+
+      case 'stock_in':
+        return (
+          <div className="w-full">
+            <InvoiceView
+              lang={lang}
+              invoiceId={tab.props?.invoiceId}
+              invoiceType="stock_in"
+              currentUser={currentUser}
+              onClose={() => handleCloseTab(tab.id)}
+              onRefreshDashboard={() => {}}
+            />
+          </div>
+        );
+
+      case 'stock_out':
+        return (
+          <div className="w-full">
+            <InvoiceView
+              lang={lang}
+              invoiceId={tab.props?.invoiceId}
+              invoiceType="stock_out"
+              currentUser={currentUser}
+              onClose={() => handleCloseTab(tab.id)}
+              onRefreshDashboard={() => {}}
+            />
+          </div>
+        );
+
       case 'stock_transfer':
         return (
           <div className="w-full">
-            <WarehouseTransferView
+            <InvoiceView
               lang={lang}
+              invoiceId={tab.props?.invoiceId}
+              invoiceType="transfer"
               currentUser={currentUser}
               onClose={() => handleCloseTab(tab.id)}
+              onRefreshDashboard={() => {}}
             />
           </div>
         );
@@ -415,32 +600,64 @@ export default function App() {
       // Sub-directories for Products, clients, vendors
       case 'products':
         return (
-          <div className="p-6 space-y-6">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white border-b border-slate-300 dark:border-slate-700 pb-3">{lang === 'ar' ? 'دليل كارت الصنف والباركود' : 'Product Directory'}</h2>
-            <div className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-4 overflow-x-auto shadow-sm">
-              <table className="w-full text-xs text-slate-700 dark:text-slate-300">
+          <div className="p-6 space-y-6" key={productRefreshKey}>
+            <div className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-300 dark:border-slate-700 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white">{lang === 'ar' ? 'دليل كارت الصنف والباركود الدولي' : 'Product Directory'}</h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">{lang === 'ar' ? 'عرض تفصيلي لجميع الأقسام والسلع المتاحة بالمستودع كجدول إكسيل' : 'Comprehensive spreadsheet view of warehouse products'}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setIsProductModalOpen(true)}
+                  className="flex items-center gap-1.5 bg-[#b89047] hover:bg-amber-400 text-black font-extrabold px-4 py-2 rounded-lg cursor-pointer transition-all shadow-md border border-[#b89047]/50"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'إضافة كارت صنف جديد (+)' : 'Add New Product Card (+)'}</span>
+                </button>
+                <button
+                  onClick={exportProductsToCSV}
+                  className="flex items-center gap-1.5 bg-[#1e40af] hover:bg-blue-800 text-white font-bold px-4 py-2 rounded-lg cursor-pointer transition-all shadow-md border border-blue-700"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>{lang === 'ar' ? 'تصدير الدليل إلى Excel / CSV' : 'Export Directory to Excel'}</span>
+                </button>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl p-4 overflow-x-auto shadow-sm">
+              <table className="w-full text-xs text-slate-800 dark:text-slate-200 excel-grid">
                 <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-right border-b border-slate-300 dark:border-slate-700">
-                    <th className="p-3">كود الصنف</th>
-                    <th className="p-3">اسم الصنف</th>
-                    <th className="p-3">الباركود الدولي</th>
-                    <th className="p-3 text-center">الوحدة</th>
-                    <th className="p-3 text-left">سعر البيع</th>
-                    <th className="p-3 text-left">التكلفة</th>
-                    <th className="p-3 text-center">الكمية الفورية</th>
+                  {/* Excel Column Letters Indicator */}
+                  <tr className="bg-slate-200 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-center font-mono text-[10px] select-none border-b border-slate-300 dark:border-slate-800">
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">A</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">B</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">C</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">D</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">E</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">F</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">G</th>
+                    <th className="p-1">H</th>
+                  </tr>
+                  <tr className="bg-slate-100 dark:bg-slate-900 text-slate-850 dark:text-slate-300 text-right border-b border-slate-300 dark:border-slate-700 font-bold">
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">كود الصنف</th>
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">اسم الصنف</th>
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">الباركود الدولي</th>
+                    <th className="p-3 text-center border-r border-slate-300 dark:border-slate-800">الوحدة</th>
+                    <th className="p-3 text-left border-r border-slate-300 dark:border-slate-800">سعر البيع</th>
+                    <th className="p-3 text-left border-r border-slate-300 dark:border-slate-800">التكلفة</th>
+                    <th className="p-3 text-center border-r border-slate-300 dark:border-slate-800">الكمية الفورية</th>
                     <th className="p-3 text-center">التاريخ والتشغيلة</th>
                   </tr>
                 </thead>
                 <tbody>
                   {mockDatabase.getProducts().map(p => (
                     <tr key={p.id} className="border-b border-slate-200 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700/20">
-                      <td className="p-3 font-mono font-bold text-slate-950 dark:text-white">{p.code}</td>
-                      <td className="p-3 font-bold">{p.name}</td>
-                      <td className="p-3 font-mono text-slate-500 dark:text-slate-400">{p.barcode}</td>
-                      <td className="p-3 text-center">{p.unit}</td>
-                      <td className="p-3 text-left font-mono text-emerald-600 dark:text-emerald-400">{p.price.toLocaleString()} EGP</td>
-                      <td className="p-3 text-left font-mono text-slate-500 dark:text-slate-400">{p.cost.toLocaleString()} EGP</td>
-                      <td className={`p-3 text-center font-mono font-bold ${p.stock <= p.minLimit ? 'text-rose-500' : 'text-slate-800 dark:text-white'}`}>{p.stock}</td>
+                      <td className="p-3 font-mono font-bold text-slate-950 dark:text-white border-r border-slate-300 dark:border-slate-800">{p.code}</td>
+                      <td className="p-3 font-bold border-r border-slate-300 dark:border-slate-800">{p.name}</td>
+                      <td className="p-3 font-mono text-slate-500 dark:text-slate-400 border-r border-slate-300 dark:border-slate-800">{p.barcode}</td>
+                      <td className="p-3 text-center border-r border-slate-300 dark:border-slate-800">{p.unit}</td>
+                      <td className="p-3 text-left font-mono text-emerald-600 dark:text-emerald-400 border-r border-slate-300 dark:border-slate-800">{p.price.toLocaleString()} EGP</td>
+                      <td className="p-3 text-left font-mono text-slate-500 dark:text-slate-400 border-r border-slate-300 dark:border-slate-800">{p.cost.toLocaleString()} EGP</td>
+                      <td className={`p-3 text-center font-mono font-bold border-r border-slate-300 dark:border-slate-800 ${p.stock <= p.minLimit ? 'text-rose-500 font-bold' : 'text-slate-800 dark:text-white'}`}>{p.stock}</td>
                       <td className="p-3 text-center text-[11px] text-slate-500 dark:text-slate-400 font-mono">{p.expiryDate || 'مستمر'}</td>
                     </tr>
                   ))}
@@ -455,29 +672,50 @@ export default function App() {
         const typeLabel = tab.type === 'clients' ? 'client' : 'vendor';
         return (
           <div className="p-6 space-y-6">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white border-b border-slate-300 dark:border-slate-700 pb-3">
-              {tab.type === 'clients' ? (lang === 'ar' ? 'دليل العملاء المعتمدين' : 'Clients Directory') : (lang === 'ar' ? 'دليل الموردين المعتمدين' : 'Vendors Directory')}
-            </h2>
-            <div className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-4 overflow-x-auto shadow-sm">
-              <table className="w-full text-xs text-slate-700 dark:text-slate-300">
+            <div className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-300 dark:border-slate-700 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-slate-800 dark:text-white">
+                  {tab.type === 'clients' ? (lang === 'ar' ? 'دليل العملاء والحسابات المعتمدة' : 'Clients Directory') : (lang === 'ar' ? 'دليل الموردين والمشتريات' : 'Vendors Directory')}
+                </h2>
+                <p className="text-[10px] text-slate-500 mt-0.5">{lang === 'ar' ? 'عرض تفصيلي للأرصدة المالية والشركاء كجدول إكسيل' : 'Spreadsheet table with current business partner details'}</p>
+              </div>
+              <button
+                onClick={() => exportPartnersToCSV(tab.type as 'clients' | 'vendors')}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-lg cursor-pointer transition-all shadow-md border border-emerald-500"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>{lang === 'ar' ? 'تصدير الدليل إلى Excel / CSV' : 'Export Directory to Excel'}</span>
+              </button>
+            </div>
+            <div className="bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 rounded-xl p-4 overflow-x-auto shadow-sm">
+              <table className="w-full text-xs text-slate-800 dark:text-slate-200 excel-grid">
                 <thead>
-                  <tr className="bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-right border-b border-slate-300 dark:border-slate-700">
-                    <th className="p-3">كود الشريك</th>
-                    <th className="p-3">الاسم بالكامل</th>
-                    <th className="p-3">الهاتف والاتصال</th>
-                    <th className="p-3">البريد الإلكتروني</th>
-                    <th className="p-3">المقر الرئيسي</th>
+                  {/* Excel Column Letters Indicator */}
+                  <tr className="bg-slate-200 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-center font-mono text-[10px] select-none border-b border-slate-300 dark:border-slate-800">
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">A</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">B</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">C</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">D</th>
+                    <th className="border-r border-slate-300 dark:border-slate-800 p-1">E</th>
+                    <th className="p-1">F</th>
+                  </tr>
+                  <tr className="bg-slate-100 dark:bg-slate-900 text-slate-850 dark:text-slate-300 text-right border-b border-slate-300 dark:border-slate-700 font-bold">
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">كود الشريك</th>
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">الاسم بالكامل</th>
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">الهاتف والاتصال</th>
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">البريد الإلكتروني</th>
+                    <th className="p-3 border-r border-slate-300 dark:border-slate-800">المقر الرئيسي</th>
                     <th className="p-3 text-left">الرصيد الدفتري الحالي</th>
                   </tr>
                 </thead>
                 <tbody>
                   {mockDatabase.getPartners().filter(p => p.type === typeLabel).map(partner => (
                     <tr key={partner.id} className="border-b border-slate-200 dark:border-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700/20">
-                      <td className="p-3 font-mono font-bold text-slate-900 dark:text-white">{partner.id}</td>
-                      <td className="p-3 font-bold">{partner.name}</td>
-                      <td className="p-3 font-mono">{partner.phone}</td>
-                      <td className="p-3 text-slate-500 dark:text-slate-400">{partner.email}</td>
-                      <td className="p-3">{partner.address}</td>
+                      <td className="p-3 font-mono font-bold text-slate-900 dark:text-white border-r border-slate-300 dark:border-slate-800">{partner.id}</td>
+                      <td className="p-3 font-bold border-r border-slate-300 dark:border-slate-800">{partner.name}</td>
+                      <td className="p-3 font-mono border-r border-slate-300 dark:border-slate-800">{partner.phone}</td>
+                      <td className="p-3 text-slate-500 dark:text-slate-400 border-r border-slate-300 dark:border-slate-800">{partner.email}</td>
+                      <td className="p-3 border-r border-slate-300 dark:border-slate-800">{partner.address}</td>
                       <td className={`p-3 text-left font-mono font-bold ${partner.balance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                         {partner.balance.toLocaleString()} EGP
                       </td>
@@ -639,7 +877,7 @@ export default function App() {
   ];
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'bg-[#090d16] text-[#f1f5f9] dark' : 'bg-[#f0f2f5] text-[#1e293b]'} flex flex-col font-sans select-none overflow-x-hidden`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen ${darkMode ? (themeAccent === 'gold' ? 'bg-[#000000] text-[#f1f5f9] dark' : 'bg-[#090d16] text-[#f1f5f9] dark') : 'bg-[#f0f2f5] text-[#1e293b]'} flex flex-col font-sans select-none overflow-x-hidden ${isLargeBoldFont ? 'large-bold-font-mode' : ''}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Dynamic Accent Colors Stylesheet Injection */}
       <style>{`
         :root {
@@ -676,6 +914,106 @@ export default function App() {
         .theme-accent-btn:hover {
           opacity: 0.9;
         }
+
+        /* Excel grid lines & spreadsheet style headers */
+        .excel-grid {
+          border-collapse: collapse !important;
+          border: 2px solid #64748b !important;
+        }
+        .excel-grid th {
+          border: 1px solid #94a3b8 !important;
+          background-color: #f1f5f9 !important;
+          color: #0f172a !important;
+          font-weight: bold !important;
+        }
+        .excel-grid td {
+          border: 1px solid #cbd5e1 !important;
+          background-color: #ffffff !important;
+          color: #000000 !important;
+        }
+        .dark .excel-grid {
+          border: 2px solid #b89047 !important;
+        }
+        .dark .excel-grid th {
+          border: 1px solid #475569 !important;
+          background-color: #0a0a0a !important;
+          color: #f5f5f5 !important;
+        }
+        .dark .excel-grid td {
+          border: 1px solid #0a0a0a !important;
+          background-color: #000000 !important;
+          color: #f1f5f9 !important;
+        }
+
+        /* Large & Bold Font theme override ("خط كبير وأسود") */
+        .large-bold-font-mode {
+          font-size: 104% !important;
+        }
+        .large-bold-font-mode p,
+        .large-bold-font-mode span,
+        .large-bold-font-mode td,
+        .large-bold-font-mode th,
+        .large-bold-font-mode input,
+        .large-bold-font-mode select,
+        .large-bold-font-mode button,
+        .large-bold-font-mode h1,
+        .large-bold-font-mode h2,
+        .large-bold-font-mode h3,
+        .large-bold-font-mode h4,
+        .large-bold-font-mode div {
+          font-weight: 700 !important;
+        }
+        .large-bold-font-mode .text-xs, 
+        .large-bold-font-mode .text-\[10px\], 
+        .large-bold-font-mode .text-\[11px\],
+        .large-bold-font-mode .font-mono {
+          font-size: 13px !important;
+        }
+        .large-bold-font-mode .text-sm {
+          font-size: 15px !important;
+        }
+        .large-bold-font-mode .text-base {
+          font-size: 17px !important;
+        }
+        .large-bold-font-mode .text-lg {
+          font-size: 19px !important;
+        }
+        .large-bold-font-mode .text-xl {
+          font-size: 22px !important;
+        }
+        .large-bold-font-mode .text-2xl {
+          font-size: 26px !important;
+        }
+        /* Make standard font colors super dark black in light mode */
+        html:not(.dark) .large-bold-font-mode .text-slate-500,
+        html:not(.dark) .large-bold-font-mode .text-slate-600,
+        html:not(.dark) .large-bold-font-mode .text-slate-700,
+        html:not(.dark) .large-bold-font-mode .text-slate-800,
+        html:not(.dark) .large-bold-font-mode .text-slate-900,
+        html:not(.dark) .large-bold-font-mode td,
+        html:not(.dark) .large-bold-font-mode th {
+          color: #000000 !important;
+        }
+
+        /* Premium Golden-Black high contrast theme frames/borders */
+        .dark.large-bold-font-mode, .dark {
+          --gold-color: #b89047;
+        }
+        .dark .bg-white, .dark .bg-slate-900 {
+          background-color: #050505 !important;
+        }
+        .dark .border-slate-200, .dark .border-slate-800 {
+          border-color: #334155 !important;
+        }
+        
+        /* Gold frame & golden-black style for cards & headers */
+        .dark .bg-white, 
+        .dark .bg-slate-900,
+        .dark header,
+        .dark .rounded-xl {
+          border: 1.5px solid var(--primary-color) !important;
+          box-shadow: 0 0 10px rgba(184, 144, 71, 0.1) !important;
+        }
       `}</style>
       
       {/* Upper Main Executive Topbar */}
@@ -693,6 +1031,94 @@ export default function App() {
             </div>
             <p className="text-[10px] text-slate-400 font-medium">{lang === 'ar' ? 'برنامج المحاسبة والمستودعات المتكامل' : 'Accounting & Warehouse ERP System'}</p>
           </div>
+        </div>
+
+        {/* Database Selector Dropdown - UPPERMOST OF THE PROGRAM */}
+        <div className="relative" id="db-selector-container">
+          <button
+            onClick={() => {
+              setShowDbMenu(!showDbMenu);
+              setShowThemeMenu(false);
+              setShowNotifications(false);
+              setShowProfileMenu(false);
+            }}
+            className="flex items-center gap-2.5 px-3 py-1.5 bg-[#121c2c] hover:bg-[#1a2d42] border border-[#c5a880]/40 rounded-lg text-xs text-[#c5a880] hover:text-white font-bold transition-all cursor-pointer shadow-md"
+            title={lang === 'ar' ? 'إدارة وقواعد البيانات النشطة' : 'Database Management & Selection'}
+          >
+            <Database className="w-4 h-4 text-[#c5a880] animate-pulse" />
+            <div className="text-right">
+              <p className="text-[9px] text-slate-400 font-medium leading-none mb-0.5">{lang === 'ar' ? 'قاعدة البيانات النشطة' : 'Active Database'}</p>
+              <p className="text-xs leading-none font-bold text-slate-200">
+                {databases.find(d => d.id === activeDbId)?.name || (lang === 'ar' ? 'قاعدة البيانات الرئيسية' : 'Main Database')}
+              </p>
+            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-[#c5a880]" />
+          </button>
+
+          {showDbMenu && (
+            <div className="absolute top-full right-0 mt-2 w-72 bg-slate-900 border border-[#c5a880]/30 rounded-xl shadow-2xl p-3.5 z-50 text-xs text-slate-100">
+              <h4 className="font-bold border-b border-slate-800 pb-2 text-white mb-2 flex items-center gap-1.5 font-sans">
+                <Database className="w-4 h-4 text-amber-500" />
+                <span>{lang === 'ar' ? 'إدارة وقواعد البيانات' : 'Database Administration'}</span>
+              </h4>
+              
+              {/* List of existing databases */}
+              <div className="space-y-1 max-h-40 overflow-y-auto mb-3 scrollbar-thin scrollbar-thumb-slate-700 text-right">
+                {databases.map((db: any) => {
+                  const isActive = db.id === activeDbId;
+                  return (
+                    <button
+                      key={db.id}
+                      onClick={() => handleSwitchDb(db.id)}
+                      className={`w-full text-right p-2.5 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
+                        isActive 
+                          ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold' 
+                          : 'hover:bg-slate-800 border border-transparent text-slate-300'
+                      }`}
+                    >
+                      <div className="text-right">
+                        <p className="font-bold text-xs">{lang === 'ar' ? db.name : db.nameEn}</p>
+                        <p className="text-[9px] text-slate-500 mt-0.5">{lang === 'ar' ? `تاريخ الإنشاء: ${db.createdAt}` : `Created: ${db.createdAt}`}</p>
+                      </div>
+                      {isActive && <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Create new database form */}
+              <div className="border-t border-slate-800 pt-3">
+                <p className="font-bold text-white mb-2 text-[11px] flex items-center gap-1 font-sans justify-end">
+                  <span>{lang === 'ar' ? 'إنشاء قاعدة بيانات جديدة' : 'Create New Database'}</span>
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                </p>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={newDbName}
+                    onChange={(e) => setNewDbName(e.target.value)}
+                    placeholder={lang === 'ar' ? 'اسم قاعدة البيانات باللغة العربية' : 'e.g. Alex Branch Database'}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#c5a880]/60 placeholder-slate-600 text-right"
+                  />
+                  <input
+                    type="text"
+                    value={newDbNameEn}
+                    onChange={(e) => setNewDbNameEn(e.target.value)}
+                    placeholder={lang === 'ar' ? 'الاسم بالإنجليزية (اختياري)' : 'English Name (Optional)'}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#c5a880]/60 placeholder-slate-600 text-right"
+                  />
+                  <button
+                    onClick={handleCreateDb}
+                    disabled={!newDbName.trim()}
+                    className="w-full py-2 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 disabled:opacity-50 text-white font-bold rounded cursor-pointer transition-all flex items-center justify-center gap-1 border border-amber-600/20 shadow-md"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'تأسيس قاعدة البيانات' : 'Initialize Database'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Universal Quick Search Bar */}
@@ -810,6 +1236,26 @@ export default function App() {
                   <div className="text-center text-[10px] text-slate-500 mt-1 font-semibold">
                     {lang === 'ar' ? accentColors[themeAccent].nameAr : accentColors[themeAccent].nameEn}
                   </div>
+                </div>
+
+                {/* 3. Font Style Switcher ("خط كبير وأسود") */}
+                <div className="space-y-2 mt-4 pt-3 border-t border-slate-800">
+                  <label className="text-[10px] font-semibold text-slate-400 block">
+                    {lang === 'ar' ? 'نمط الخط والمقاس' : 'Font Size & Weight'}
+                  </label>
+                  <button
+                    onClick={() => setIsLargeBoldFont(!isLargeBoldFont)}
+                    className={`w-full flex items-center justify-between p-2 rounded-lg border transition-all cursor-pointer font-bold ${
+                      isLargeBoldFont 
+                        ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' 
+                        : 'bg-slate-950 border-slate-850 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>{lang === 'ar' ? 'خط عريض وكبير أسود 🔠' : 'Large Bold Font 🔠'}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-white font-mono">
+                      {isLargeBoldFont ? (lang === 'ar' ? 'مفعل' : 'ON') : (lang === 'ar' ? 'ملغي' : 'OFF')}
+                    </span>
+                  </button>
                 </div>
               </div>
             )}
@@ -1095,14 +1541,14 @@ export default function App() {
             </div>
           ) : (
             /* Single view mode (covers full screen width) */
-            <div className="flex-1 p-3 flex flex-col min-h-0">
+            <div className="flex-1 p-1 md:p-1.5 flex flex-col min-h-0">
               {tabs.map((tab) => {
                 const isActive = activeTabId === tab.id;
                 if (!isActive) return null;
                 return (
                   <div key={tab.id} className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col shadow-sm min-h-0">
                     {renderTabHeaderControls(tab, 'left')}
-                    <div className="flex-1 overflow-y-auto p-4">
+                    <div className="flex-1 overflow-y-auto p-1.5 md:p-3.5">
                       {renderTabContent(tab)}
                     </div>
                   </div>
@@ -1112,6 +1558,16 @@ export default function App() {
           )}
         </div>
       </main>
+
+      <ProductModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onSave={() => {
+          setProductRefreshKey(prev => prev + 1);
+        }}
+        lang={lang}
+        currentUser={currentUser}
+      />
     </div>
   );
 }

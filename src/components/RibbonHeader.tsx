@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Home, ShoppingBag, ShoppingCart, Package, Users, Briefcase, FileSpreadsheet, Settings, 
   Plus, List, ArrowLeftRight, ClipboardList, Database, FileText, LayoutDashboard, UserCheck, 
-  ShieldCheck, BookOpen, Receipt, RefreshCw, Layers, DollarSign, Wallet, ShieldAlert, Cpu, Landmark
+  ShieldCheck, BookOpen, Receipt, RefreshCw, Layers, DollarSign, Wallet, ShieldAlert, Cpu, Landmark, X
 } from 'lucide-react';
 
 interface RibbonHeaderProps {
@@ -129,6 +129,14 @@ export default function RibbonHeader({ lang, onOpenTab, currentUser }: RibbonHea
             </button>
 
             <button
+              onClick={() => handleAction('sales_return', 'مرتجع مبيعات جديد', 'New Sales Return')}
+              className="flex flex-col items-center gap-1 p-2 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer min-w-[70px]"
+            >
+              <RefreshCw className="w-5 h-5 text-amber-500" />
+              <span className="text-[10px] font-bold">{lang === 'ar' ? 'مرتجع بيع' : 'Sale Return'}</span>
+            </button>
+
+            <button
               onClick={() => handleAction('pos_view', 'شاشة مبيعات الكاشير POS', 'POS Terminal Workspace')}
               className="flex flex-col items-center gap-1 p-2 text-slate-700 dark:text-slate-300 hover:theme-accent-text dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer min-w-[70px]"
             >
@@ -155,6 +163,15 @@ export default function RibbonHeader({ lang, onOpenTab, currentUser }: RibbonHea
               <Plus className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               <span className="text-[10px] font-bold">{lang === 'ar' ? 'فاتورة شراء' : 'New Purchase'}</span>
             </button>
+
+            <button
+              onClick={() => handleAction('purchase_return', 'مرتجع مشتريات جديد', 'New Purchase Return')}
+              className="flex flex-col items-center gap-1 p-2 text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer min-w-[70px]"
+            >
+              <RefreshCw className="w-5 h-5 text-rose-500" />
+              <span className="text-[10px] font-bold">{lang === 'ar' ? 'مرتجع شراء' : 'Purchase Return'}</span>
+            </button>
+
             <button
               onClick={() => handleAction('vendors', 'دليل الموردين والمستودع', 'Vendor Directory')}
               className="flex flex-col items-center gap-1 p-2 text-slate-700 dark:text-slate-300 hover:theme-accent-text dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer min-w-[70px]"
@@ -181,6 +198,22 @@ export default function RibbonHeader({ lang, onOpenTab, currentUser }: RibbonHea
             >
               <Layers className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
               <span className="text-[10px] font-bold">{lang === 'ar' ? 'جرد المستودعات' : 'Stock Jard'}</span>
+            </button>
+
+            <button
+              onClick={() => handleAction('stock_in', 'إذن إضافة مخزني جديد', 'New Stock Inbound')}
+              className="flex flex-col items-center gap-1 p-2 text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer min-w-[70px]"
+            >
+              <Plus className="w-5 h-5 text-emerald-500" />
+              <span className="text-[10px] font-bold">{lang === 'ar' ? 'إذن إضافة' : 'Stock In'}</span>
+            </button>
+
+            <button
+              onClick={() => handleAction('stock_out', 'إذن صرف مخزني جديد', 'New Stock Outbound')}
+              className="flex flex-col items-center gap-1 p-2 text-slate-700 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 rounded-lg transition-all cursor-pointer min-w-[70px]"
+            >
+              <X className="w-5 h-5 text-rose-500" />
+              <span className="text-[10px] font-bold">{lang === 'ar' ? 'إذن صرف' : 'Stock Out'}</span>
             </button>
 
             <button
